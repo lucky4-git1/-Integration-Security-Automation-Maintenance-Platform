@@ -1,0 +1,43 @@
+{
+  "name": "integration-security-automation-platform",
+  "version": "1.0.0",
+  "description": "Production-grade platform for managing integrations, security, automation monitoring, and maintenance operations",
+  "private": true,
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\" \"npm run dev:worker\"",
+    "dev:backend": "npm run dev --workspace=@platform/backend",
+    "dev:frontend": "npm run dev --workspace=@platform/frontend",
+    "dev:worker": "npm run dev --workspace=@platform/worker",
+    "build": "npm run build --workspaces",
+    "build:backend": "npm run build --workspace=@platform/backend",
+    "build:frontend": "npm run build --workspace=@platform/frontend",
+    "build:worker": "npm run build --workspace=@platform/worker",
+    "test": "npm run test --workspaces",
+    "test:unit": "npm run test:unit --workspaces",
+    "test:integration": "npm run test:integration --workspaces",
+    "test:e2e": "npm run test:e2e --workspace=@platform/backend",
+    "lint": "npm run lint --workspaces",
+    "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md}\"",
+    "format:check": "prettier --check \"**/*.{ts,tsx,js,jsx,json,md}\"",
+    "typecheck": "npm run typecheck --workspaces",
+    "db:migrate": "npm run db:migrate --workspace=@platform/backend",
+    "db:studio": "npm run db:studio --workspace=@platform/backend",
+    "db:seed": "npm run db:seed --workspace=@platform/backend",
+    "docker:up": "docker-compose up -d",
+    "docker:down": "docker-compose down",
+    "docker:logs": "docker-compose logs -f"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "concurrently": "^8.2.2",
+    "prettier": "^3.2.4",
+    "typescript": "^5.3.3"
+  },
+  "engines": {
+    "node": ">=20.0.0",
+    "npm": ">=10.0.0"
+  }
+}

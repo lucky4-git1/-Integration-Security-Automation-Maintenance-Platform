@@ -1,0 +1,242 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+env:
+  NODE_VERSION: '20'
+
+jobs:
+  # ── Lint & Type-check ─────────────────────────────────────────────────────
+  lint-typecheck:
+    name: Lint & Type-check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Format check
+        run: npm run format:check
+
+      - name: Lint backend
+        run: npm run lint --workspace=packages/backend
+
+      - name: Lint frontend
+        run: npm run lint --workspace=packages/frontend
+
+      - name: Type-check backend
+        run: npm run typecheck --workspace=packages/backend
+
+      - name: Type-check frontend
+        run: npm run typecheck --workspace=packages/frontend
+
+      - name: Type-check worker
+        run: npm run typecheck --workspace=packages/worker
+
+  # ── Unit Tests ────────────────────────────────────────────────────────────
+  unit-tests:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    needs: lint-typecheck
+    env:
+      NODE_ENV: test
+      DATABASE_URL: postgresql://platform_user:platform_password@localhost:5432/platform_test
+      REDIS_URL: redis://localhost:6379
+      JWT_SECRET: test_jwt_secret_that_is_at_least_32_characters_long
+      SESSION_SECRET: test_session_secret_32_characters_long_pad
+      ENCRYPTION_KEY: 0000000000000000000000000000000000000000000000000000000000000000
+      BCRYPT_ROUNDS: '4'
+      CORS_ORIGIN: http://localhost:3000
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: platform_user
+          POSTGRES_PASSWORD: platform_password
+          POSTGRES_DB: platform_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+      redis:
+        image: redis:7-alpine
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 3s
+          --health-retries 5
+        ports:
+          - 6379:6379
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma client
+        run: npx prisma generate
+        working-directory: packages/backend
+
+      - name: Run database migrations
+        run: npx prisma migrate deploy
+        working-directory: packages/backend
+
+      - name: Run backend unit tests
+        run: npm run test:unit --workspace=packages/backend
+
+  # ── Build ─────────────────────────────────────────────────────────────────
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    needs: lint-typecheck
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma client
+        run: npx prisma generate
+        working-directory: packages/backend
+
+      - name: Build backend
+        run: npm run build --workspace=packages/backend
+
+      - name: Build frontend
+        run: npm run build --workspace=packages/frontend
+        env:
+          VITE_API_URL: ''
+
+      - name: Build worker
+        run: npm run build --workspace=packages/worker
+
+      - name: Upload frontend build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-dist
+          path: packages/frontend/dist
+          retention-days: 7
+
+  # ── Security Scan ─────────────────────────────────────────────────────────
+  security-scan:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Audit dependencies
+        run: npm audit --audit-level=high
+        continue-on-error: true
+
+      - name: Check for secrets in code
+        uses: trufflesecurity/trufflehog@main
+        with:
+          path: ./
+          base: ${{ github.event.repository.default_branch }}
+          head: HEAD
+        continue-on-error: true
+
+  # ── Integration Tests ─────────────────────────────────────────────────────
+  integration-tests:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    needs: build
+    env:
+      NODE_ENV: test
+      DATABASE_URL: postgresql://platform_user:platform_password@localhost:5432/platform_test
+      REDIS_URL: redis://localhost:6379
+      JWT_SECRET: test_jwt_secret_that_is_at_least_32_characters_long
+      SESSION_SECRET: test_session_secret_32_characters_long_pad
+      ENCRYPTION_KEY: 0000000000000000000000000000000000000000000000000000000000000000
+      BCRYPT_ROUNDS: '4'
+      CORS_ORIGIN: http://localhost:3000
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: platform_user
+          POSTGRES_PASSWORD: platform_password
+          POSTGRES_DB: platform_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+      redis:
+        image: redis:7-alpine
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 3s
+          --health-retries 5
+        ports:
+          - 6379:6379
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma client
+        run: npx prisma generate
+        working-directory: packages/backend
+
+      - name: Run database migrations
+        run: npx prisma migrate deploy
+        working-directory: packages/backend
+
+      - name: Seed database
+        run: npm run db:seed --workspace=packages/backend
+
+      - name: Run integration tests
+        run: npm run test:integration --workspace=packages/backend
