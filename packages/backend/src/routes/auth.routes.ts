@@ -98,6 +98,17 @@ router.post('/logout', authenticate, async (req, res) => {
 });
 
 /**
+ * GET /api/v1/auth/me
+ * Get current authenticated user
+ */
+router.get('/me', authenticate, async (req, res) => {
+  res.json({
+    success: true,
+    data: { user: req.user },
+  });
+});
+
+/**
  * POST /api/v1/auth/password-reset/request
  * Request password reset
  */
